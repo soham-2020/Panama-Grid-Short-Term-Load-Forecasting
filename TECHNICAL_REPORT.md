@@ -1,10 +1,8 @@
 # TECHNICAL REPORT: SHORT-TERM LOAD FORECASTING FOR PANAMA ELECTRICAL GRID
 
 **Title**: Physics-Informed Machine Learning for 72-Hour Grid Stability  
-**Author**: [Your Name], EEE Student  
-**Institution**: [Your University]  
-**Date**: December 2024  
-**Word Count**: ~1,200 words  
+**Author**: Soham Vashistha, EEE Student  
+
 
 ---
 
