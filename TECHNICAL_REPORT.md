@@ -287,10 +287,3 @@ We achieve production-grade accuracy (likely <2% MAPE) while maintaining interpr
 
 **Recommendation**: Deploy as part of ASEP's operational forecasting suite, with human-in-the-loop validation for ±300 MW demand anomalies.
 
----
-
-5. Ribeiro, M. T., Singh, S., Guestrin, C. (2016). "'Why should I trust you?' Explaining predictions of any classifier." *arXiv*:1602.04938
-
----
-
-**Document Status**: Final | **Classification**: Academic/Educational
