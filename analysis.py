@@ -1,15 +1,4 @@
-"""
-Panama Grid Load Forecasting — Advanced EEE Analytics
-======================================================
-Author  : [Your Name] | EEE Portfolio Project
-Dataset : Panama Case Study — continuous dataset.csv
-Model   : XGBoost Regressor with Temporal Split (no data leakage)
-Target  : nat_demand (MW)
-"""
 
-# ──────────────────────────────────────────────
-# 0. IMPORTS
-# ──────────────────────────────────────────────
 import warnings
 warnings.filterwarnings("ignore")
 
