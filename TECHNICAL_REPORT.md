@@ -289,18 +289,6 @@ We achieve production-grade accuracy (likely <2% MAPE) while maintaining interpr
 
 ---
 
-## REFERENCES
-
-1. Alfares, H. & Nazeeruddin, M. (2002). "Electric load forecasting: literature survey and classification of methods." *International Journal of Systems Science*, 33(1), 23-34.
-
-2. Chen, T. & Guestrin, C. (2016). "XGBoost: A scalable tree boosting system." *Proceedings of the 22nd ACM SIGKDD International Conference*, 785-794.
-
-3. Hong, T. & Pinson, P. (2016). "Probabilistic energy forecasting: Global Energy Forecasting Competition 2014." *International Journal of Forecasting*, 32(3), 896-913.
-
-4. NERC Standards (North American Electric Reliability Corporation):
-   - BAL-002-2: Disturbance Control Performance
-   - BAL-005-1: Ramping Capability
-
 5. Ribeiro, M. T., Singh, S., Guestrin, C. (2016). "'Why should I trust you?' Explaining predictions of any classifier." *arXiv*:1602.04938
 
 ---
