@@ -1,149 +1,143 @@
-# Panama Grid Short-Term Load Forecasting — Production Deployment
+# Panama Grid — Next-Hour Load Forecasting
 
-Real-Time Electricity Demand Prediction + Grid Stability Intelligence
+**Task**: Predict `nat_demand` (MW) for the **next hour** using XGBoost on hourly Panama grid data.
 
-| COMPONENT | TECH STACK |
-|-----------|-----------|
-| PYTHON | 3.8+ |
-| MACHINE LEARNING | XGBOOST |
-| FORECASTING | STLF |
-| PHYSICS | EEE |
-| DEPLOYMENT | DOCKER |
-| FRAMEWORK | TENSORFLOW LITE |
-| MONITORING | MQTT |
-| DASHBOARD | NODE-RED |
-
-| STATUS | ACCURACY | PERFORMANCE | EFFICIENCY |
-|--------|----------|-------------|-----------|
-| ✅ PRODUCTION READY | 1.58% MAPE | 3.25x BETTER | 280KB |
-
-| DEPLOYMENT |
-|-----------|
-| GITHUB | AWS | DOCKER | KUBERNETES |
+> **Note**: This is a one-step-ahead (next-hour) forecast, not a 72-hour or multi-step forecast.
 
 ---
 
-## The Challenge
+## Dataset
 
-Modern electricity grids operate with razor-thin margins. At every moment, total power generation must equal total demand plus safety reserves. Even small forecast errors trigger cascading failures:
-
-**Under-forecast** → Insufficient generation scheduled → Voltage collapse → Blackouts
-
-**Over-forecast** → Excessive idle generators → Wasted fuel → Higher costs
-
-**Ramp errors** → Sudden demand spikes → Generators can't respond → Frequency failure
-
-The critical constraint: spinning reserves must be committed **72 hours in advance**. Inaccurate forecasts at this horizon cost millions in wasted reserves and blackout risk.
+| Field | Value |
+|---|---|
+| Source | Panama Case Study — `continuous_dataset.csv` |
+| Granularity | Hourly |
+| Date range | 2015-01-03 → 2020-06-27 (≈ 5.5 years, 48 048 records) |
+| Target column | `nat_demand` (MW, national grid load) |
+| Weather station | Tocumen Airport (`T2M_toc`) — Panama City |
 
 ---
 
-## Technical Architecture
+## Features Used
 
-| LAYER | TECHNOLOGY | PURPOSE |
-|-------|-----------|---------|
-| **Data Input** | Pandas, NumPy | Time-series processing, interpolation |
-| **Feature Engineering** | NumPy | Physics-informed features (T², cyclical, lags) |
-| **Machine Learning** | XGBoost v1.7+ | Gradient boosting regression |
-| **Validation** | scikit-learn | Accuracy metrics (MAE, RMSE, MAPE, R²) |
-| **Visualization** | Matplotlib, Seaborn | Diagnostic charts & insights |
-| **Deployment** | Docker, Python | Production-ready containerization |
+| Feature | Description |
+|---|---|
+| `hour_sin`, `hour_cos` | Cyclical hour-of-day encoding |
+| `dow_sin`, `dow_cos` | Cyclical day-of-week encoding |
+| `month_sin`, `month_cos` | Cyclical month encoding *(added only when dataset spans > 1 year)* |
+| `load_lag_1h` | `nat_demand` at t − 1 h |
+| `load_lag_24h` | `nat_demand` at t − 24 h (same hour yesterday) |
+| `load_lag_168h` | `nat_demand` at t − 168 h (same hour last week) |
+| `T2M_toc` | 2-metre air temperature at Tocumen (°C) |
+| `T_dev_sq` | `(T2M_toc − 24)²` — quadratic deviation from 24 °C thermal-comfort baseline |
 
----
-
-## Core Features
-
-### 1. Time-Respected Interpolation
-
-Electricity demand follows a strict daily curve. Morning ramp → Evening peak → Night trough. Standard linear interpolation misses this pattern.
-
-**Solution**: Time-delta weighted interpolation preserves the natural load curve shape.
-
-**Impact**: +3–5% accuracy on transition hours
+No other columns from the raw CSV are included. Auto-detection of numeric columns has been intentionally removed to prevent accidental leakage.
 
 ---
 
-### 2. Cyclical Time Encoding
+## Preprocessing
 
-Hours 23 and 0 appear far apart numerically but represent adjacent times with similar demand.
-
-**Solution**: Sine/cosine transformation creates circular time representation.
-
-Applied to: Hour (24h), Month (12-month), Day-of-week (7-day)
-
-**Impact**: Eliminates artificial discontinuities, +3–5% accuracy on boundaries
+- **Target gaps**: rows with missing `nat_demand` are **dropped** (not interpolated).  
+  Interpolating the forecasting target leaks future information into the training set.
+- **Weather gaps**: short gaps in exogenous weather columns are filled with **linear interpolation** (equivalent to time-based interpolation on uniform hourly data).
+- **Lag rows**: the first 168 rows that acquire NaN lags are dropped after lag construction.
 
 ---
 
-### 3. Physics Feature: Temperature²
+## Validation Method
 
-Demand vs. temperature is U-shaped. Moderate temp = baseline. Extremes = demand spikes (heating + cooling).
-
-**Solution**: Squared temperature feature captures non-linear scaling.
-
-**Impact**: +5–8% accuracy, represents real grid physics
-
----
-
-### 4. Autoregressive Lags
-
-Grid operators baseline predictions against yesterday's demand.
-
-**Features**:
-- Load from 1 hour ago (momentum)
-- Load from 24 hours ago (daily seasonality)
-- Load from 168 hours ago (weekly pattern)
-
-**Impact**: Captures strong demand autocorrelation from consistent schedules
+| Setting | Value |
+|---|---|
+| Split type | Chronological (no shuffling) |
+| Train | First 80% of timesteps (2015-01-10 → 2019-05-25, 38 304 h) |
+| Test | Last 20% of timesteps (2019-05-25 → 2020-06-27, 9 576 h) |
+| Shuffle | None — prevents future-data leakage |
 
 ---
 
-### 5. Temporal Validation (No Data Leakage)
+## Model
 
-**Critical mistake**: Shuffling train/test splits allows model to "see" future data during training.
-
-**Our approach**:
-- Training: First 80% of history (chronological)
-- Testing: Final 20% (purely unseen future data)
-
-**Result**: Realistic production performance guarantees
-
----
-
-## Performance Metrics
-
-| Metric | XGBoost | Official Forecast | Winner |
-|--------|---------|-------------------|--------|
-| **MAE (MW)** | 18.87 | 61.31 | ✅ XGBoost (3.25x) |
-| **RMSE (MW)** | 26.61 | 80.22 | ✅ XGBoost (3.01x) |
-| **MAPE (%)** | 1.58 | 5.13 | ✅ XGBoost (3.25x) |
-| **R² (Variance)** | 0.9726 | — | ✅ 97.26% explained |
-
-### Accuracy Interpretation
-
-| Metric | Industry Standard | Ours | Status |
-|--------|------------------|------|--------|
-| MAPE | <2% = Excellent | 1.58% | ✅ Top-tier |
-| MAE | <50 MW (1.7%) | 18.87 MW | ✅ Production-grade |
-| R² | >0.95 = Excellent | 0.9726 | ✅ Best-in-class |
+```python
+XGBRegressor(
+    n_estimators     = 300,
+    max_depth        = 4,
+    learning_rate    = 0.05,
+    subsample        = 0.8,
+    colsample_bytree = 0.8,
+    random_state     = 42,
+    n_jobs           = -1,
+)
+```
 
 ---
 
-## Dataset Overview
+## Results
 
-| Property | Value |
-|----------|-------|
-| **Primary File** | continuous dataset.csv |
-| **Time Span** | Multi-year (48,048 hourly records) |
-| **Frequency** | 1 sample per hour |
-| **Target** | nat_demand (National Demand in MW) |
-| **Weather** | Temperature, humidity, wind, pressure |
-| **Validation** | weekly pre-dispatch forecast.csv |
+*Measured on the chronological 20% test split (2019-05-25 → 2020-06-27, 9 576 h).*
+
+| Metric | XGBoost | Naive baseline (same-hour-yesterday) |
+|---|---|---|
+| MAPE | **1.63 %** | 6.03 % |
+| MAE | 19.57 MW | — |
+| RMSE | 26.40 MW | — |
+| R² | 0.9799 | — |
+
+**XGBoost improvement over baseline: +4.39 pp MAPE**  
+*(XGBoost 1.63 % vs same-hour-yesterday persistence 6.03 %)*
 
 ---
 
-## Quick Start
+## Top Feature Importances (Gain)
 
-### Installation
+| Feature | Importance |
+|---|---|
+| `load_lag_1h` | 0.422 |
+| `load_lag_168h` | 0.204 |
+| `T2M_toc` | 0.135 |
+| `load_lag_24h` | 0.103 |
+| `dow_sin` | 0.049 |
+
+---
+
+## Official Forecast Comparison
+
+The script optionally compares XGBoost against the official weekly pre-dispatch forecast  
+(`weekly pre-dispatch forecast.csv`, columns: `datetime`, `load_forecast`).  
+Comparison is restricted to the **intersection of timestamps** between the official forecast file and the test set.
+
+---
+
+## Limitations & Honest Caveats
+
+- Results reflect the single chronological test split described above — no cross-validation.
+- No hyperparameter search was performed; the configuration is a defensible default.
+- Holiday and school-calendar columns in the raw CSV were not used; including them may reduce errors around public holidays.
+- No claims about real-time latency, edge deployment, or production readiness are made.
+
+---
+
+## Running the Script
+
+```bash
+# With explicit path:
+python analysis.py path/to/continuous_dataset.csv
+
+# With default convention (expects file at data/continuous_dataset.csv):
+python analysis.py
+```
+
+Outputs saved to `outputs/`:
+
+| File | Contents |
+|---|---|
+| `outputs/forecast_analysis.png` | Actual vs forecast + residuals + feature importance |
+| `outputs/diurnal_curve.png` | Average hourly load — weekday vs weekend |
+| `outputs/temperature_scatter.png` | Temperature vs demand (coloured by hour) |
+
+---
+
+## Installation
 
 ```bash
 pip install pandas numpy xgboost scikit-learn matplotlib seaborn
+```
