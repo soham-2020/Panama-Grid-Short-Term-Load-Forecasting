@@ -154,3 +154,24 @@ Outputs saved to `outputs/`:
 ```bash
 pip install pandas numpy xgboost scikit-learn matplotlib seaborn
 ```
+---
+
+## Running with Docker
+
+### Option A: Using Docker CLI
+```bash
+# 1. Build image
+docker build -t panama-grid .
+
+# 2. Run with mounted data and outputs directories
+docker run --rm \
+  -v "${PWD}/data:/app/data:ro" \
+  -v "${PWD}/outputs:/app/outputs" \
+  panama-grid
+```
+
+### Option B: Using Docker Compose
+```bash
+docker compose up --build
+```
+The forecast results and plots will be saved directly into `./outputs/`.
