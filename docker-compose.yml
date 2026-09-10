@@ -1,0 +1,6 @@
+services:
+  panama-grid:
+    build: .
+    volumes:
+      - ./data:/app/data:ro
+      - ./outputs:/app/outputs
