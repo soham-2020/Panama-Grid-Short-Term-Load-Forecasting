@@ -2,7 +2,6 @@
 
 **Task**: Predict `nat_demand` (MW) for the **next hour** using XGBoost on hourly Panama grid data.
 
-> **Note**: This is a one-step-ahead (next-hour) forecast, not a 72-hour or multi-step forecast.
 
 ---
 
