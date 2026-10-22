@@ -1,6 +1,8 @@
 services:
   panama-grid:
     build: .
+    init: true
+    command: ["data/continuous_dataset.csv"]
     volumes:
       - ./data:/app/data:ro
       - ./outputs:/app/outputs
