@@ -14,6 +14,7 @@ Target  : nat_demand (MW)
 import sys
 import warnings
 warnings.filterwarnings("ignore")
+from pathlib import Path
 
 import numpy as np
 import pandas as pd
@@ -33,8 +34,68 @@ print("=" * 60)
 
 # Accept file path from CLI; fall back to conventional relative path.
 continuous_dataset_path = sys.argv[1] if len(sys.argv) > 1 else "data/continuous_dataset.csv"
+dataset_path = Path(continuous_dataset_path)
+if not dataset_path.is_file():
+    raise SystemExit(
+        f"ERROR: Dataset not found: {dataset_path}\n"
+        "Download the Panama hourly dataset from Mendeley Data (DOI: "
+        "10.17632/byx7sztj59.1), then place/rename its continuous CSV to "
+        "data/continuous_dataset.csv. See README.md for steps."
+    )
 
-df = pd.read_csv(continuous_dataset_path, parse_dates=["datetime"])
+try:
+    df = pd.read_csv(dataset_path)
+except (OSError, pd.errors.ParserError, UnicodeDecodeError) as exc:
+    raise SystemExit(f"ERROR: Could not read CSV '{dataset_path}': {exc}") from exc
+
+required_columns = {"datetime", "nat_demand"}
+missing_columns = sorted(required_columns.difference(df.columns))
+if missing_columns:
+    raise SystemExit(
+        "ERROR: Dataset schema is missing required column(s): "
+        f"{', '.join(missing_columns)}. Expected at least: "
+        "datetime, nat_demand."
+    )
+
+parsed_datetime = pd.to_datetime(df["datetime"], errors="coerce")
+invalid_datetime_count = int(parsed_datetime.isna().sum())
+if invalid_datetime_count:
+    raise SystemExit(
+        f"ERROR: Found {invalid_datetime_count} blank or invalid value(s) in 'datetime'."
+    )
+df["datetime"] = parsed_datetime
+
+numeric_target = pd.to_numeric(df["nat_demand"], errors="coerce")
+invalid_target = df["nat_demand"].notna() & numeric_target.isna()
+if invalid_target.any():
+    raise SystemExit(
+        f"ERROR: Found {int(invalid_target.sum())} non-numeric value(s) in 'nat_demand'."
+    )
+if (~np.isfinite(numeric_target.dropna())).any():
+    raise SystemExit("ERROR: 'nat_demand' contains infinite values.")
+df["nat_demand"] = numeric_target
+
+for column in df.columns.difference(["datetime", "nat_demand"]):
+    numeric_values = pd.to_numeric(df[column], errors="coerce")
+    invalid_values = df[column].notna() & numeric_values.isna()
+    if invalid_values.any():
+        raise SystemExit(
+            f"ERROR: Found {int(invalid_values.sum())} non-numeric value(s) in "
+            f"feature column '{column}'. Feature columns must be numeric."
+        )
+    if (~np.isfinite(numeric_values.dropna())).any():
+        raise SystemExit(f"ERROR: Feature column '{column}' contains infinite values.")
+    df[column] = numeric_values
+
+if len(df) < 200:
+    raise SystemExit(
+        f"ERROR: Dataset has only {len(df)} rows; at least 200 hourly rows are "
+        "needed for the 168-hour lag features and a useful train/test split."
+    )
+
+if df["datetime"].duplicated().any():
+    raise SystemExit("ERROR: Dataset contains duplicate timestamps in 'datetime'.")
+
 df.set_index("datetime", inplace=True)
 df.sort_index(inplace=True)
 
@@ -59,6 +120,10 @@ df = df.dropna(subset=["nat_demand"])
 missing_after  = df["nat_demand"].isnull().sum()
 print(f"  [Target] Dropped {missing_before} row(s) with missing nat_demand "
       f"(remaining missing: {missing_after})")
+if (df["nat_demand"] <= 0).any():
+    raise SystemExit(
+        "ERROR: 'nat_demand' must be greater than zero because MAPE divides by actual demand."
+    )
 
 # -- 2b. Weather features: linear interpolation ----------------
 # On uniform hourly data, time-based interpolation reduces to
@@ -372,3 +437,4 @@ print("ALL STEPS COMPLETE")
 print(f"  MAE  = {mae:.2f} MW  |  RMSE = {rmse:.2f} MW  |  MAPE = {mape:.2f}%  |  R² = {r2:.4f}")
 print(f"  Naive Baseline MAPE = {baseline_mape:.2f}%  |  Improvement = {improvement_pp:+.2f} pp")
 print("=" * 60)
+
