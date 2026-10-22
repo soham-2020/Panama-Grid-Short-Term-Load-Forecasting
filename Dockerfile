@@ -10,7 +10,7 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-COPY analysis.py .
+COPY analysis.py smoke_test.py ./
 
 ENV MPLBACKEND=Agg
 
