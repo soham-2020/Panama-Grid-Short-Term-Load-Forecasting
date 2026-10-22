@@ -1,176 +1,111 @@
 # Panama Grid — Next-Hour Load Forecasting
 
-**Task**: Predict `nat_demand` (MW) for the **next hour** using XGBoost on hourly Panama grid data.
+Predict Panama's next-hour national electricity demand (nat_demand) with an XGBoost regressor, using a chronological train/test split and hourly weather/load features.
 
+## Dataset and first-time setup
 
----
+The project uses the preprocessed hourly Panama case-study data published by Ernesto Aguilar Madrid on Mendeley Data:
 
-## Dataset
+- **Dataset:** [Short-term electricity load forecasting (Panama case study)](https://data.mendeley.com/datasets/byx7sztj59/1)
+- **DOI:** [10.17632/byx7sztj59.1](https://doi.org/10.17632/byx7sztj59.1)
+- **License:** CC BY 4.0 (see the dataset record)
+- **Coverage:** hourly records from January 2015 through June 2020, combining historical grid demand with weather and calendar data.
 
-| Field | Value |
-|---|---|
-| Source | Panama Case Study — `continuous_dataset.csv` |
-| Granularity | Hourly |
-| Date range | 2015-01-03 → 2020-06-27 (5.5 years, 48 048 records) |
-| Target column | `nat_demand` (MW, national grid load) |
-| Weather station | Tocumen Airport (`T2M_toc`) — Panama City |
+The Mendeley record describes a continuous CSV with the merged hourly records. The CSV is not committed here. To acquire it:
 
----
+1. Open the Mendeley Data record above and select **Download All**.
+2. Extract the downloaded archive.
+3. Identify the preprocessed continuous dataset CSV (not the separate weekly pre-dispatch forecast CSV). It must have datetime and nat_demand columns; T2M_toc is the temperature feature used when present.
+4. From the repository root, create data/ and copy/rename that CSV to data/continuous_dataset.csv.
 
-## Features Used
-
-The feature list below is exact and fixed — no dynamic column detection. All 11 features listed
-were present in the run that produced the reported metrics.
-
-| Feature | Description |
-|---|---|
-| `hour_sin`, `hour_cos` | Cyclical hour-of-day encoding |
-| `dow_sin`, `dow_cos` | Cyclical day-of-week encoding |
-| `month_sin`, `month_cos` | Cyclical month encoding — **included** (dataset spans 5.5 years > 1 year threshold) |
-| `load_lag_1h` | `nat_demand` at t − 1 h |
-| `load_lag_24h` | `nat_demand` at t − 24 h (same hour yesterday) |
-| `load_lag_168h` | `nat_demand` at t − 168 h (same hour last week) |
-| `T2M_toc` | 2-metre air temperature at Tocumen (°C) |
-| `T_dev_sq` | `(T2M_toc − 24)²` — quadratic deviation from 24 °C thermal-comfort baseline |
-
-Total: 11 features. The code includes `month_sin`/`month_cos` automatically when the dataset
-spans more than one calendar year; at 5.5 years this condition is always met for this dataset.
-
----
-
-## Preprocessing
-
-- **Target gaps**: rows with missing `nat_demand` are **dropped** (not interpolated).
-  Interpolating the forecasting target leaks future information into the training set.
-- **Weather gaps**: short gaps in exogenous weather columns are filled with **linear interpolation**
-  (equivalent to time-based interpolation on uniform hourly data).
-- **Lag rows**: the first 168 rows that acquire NaN lags are dropped after lag construction.
-
----
-
-## Validation Method
-
-| Setting | Value |
-|---|---|
-| Split type | Chronological (no shuffling) |
-| Train | First 80% of timesteps — 2015-01-10 → 2019-05-25 (38 304 h) |
-| Test | Last 20% of timesteps — 2019-05-25 → 2020-06-27 (9 576 h) |
-| Shuffle | None — prevents future-data leakage |
-
----
-
-## Model
-
-```python
-XGBRegressor(
-    n_estimators     = 300,
-    max_depth        = 4,
-    learning_rate    = 0.05,
-    subsample        = 0.8,
-    colsample_bytree = 0.8,
-    random_state     = 42,
-    n_jobs           = -1,
-)
-```
-
----
-
-## Results
-
-*Measured on the chronological 20% test split (2019-05-25 → 2020-06-27, 9 576 h).*
-
-| Metric | XGBoost | Naive baseline (same-hour-yesterday) |
-|---|---|---|
-| MAPE | **1.63 %** | 6.03 % |
-| MAE | 19.57 MW | — |
-| RMSE | 26.40 MW | — |
-| R² | 0.9799 | — |
-
-**XGBoost improvement over baseline: +4.39 pp MAPE**
-*(XGBoost 1.63 % vs same-hour-yesterday persistence 6.03 %)*
-
----
-
-## Top Feature Importances (Gain)
-
-| Feature | Importance |
-|---|---|
-| `load_lag_1h` | 0.422 |
-| `load_lag_168h` | 0.204 |
-| `T2M_toc` | 0.135 |
-| `load_lag_24h` | 0.103 |
-| `dow_sin` | 0.049 |
-
----
-
-## Official Forecast Comparison
-
-The script optionally compares XGBoost against the official weekly pre-dispatch forecast.
-
-**Column names verified directly from CSV header:**
-
-| File | Datetime column | Forecast column |
-|---|---|---|
-| `weekly pre-dispatch forecast.csv` | `datetime` | `load_forecast` |
-
-Comparison is restricted to the **intersection of timestamps** between the official forecast
-file and the test set — no independent-window or full-file evaluation.
-
----
-
-## Limitations & Honest Caveats
-
-- Results reflect the single chronological test split described above — no cross-validation.
-- No hyperparameter search was performed; the configuration is a defensible default.
-- Holiday and school-calendar columns in the raw CSV were not used; including them may
-  reduce errors around public holidays.
-- No claims about real-time latency, edge deployment, or production readiness are made.
-
----
-
-## Running the Script
+For example, after extracting to dataset-download/:
 
 ```bash
-# With explicit path:
-python analysis.py path/to/continuous_dataset.csv
+mkdir -p data outputs
+find dataset-download -type f -iname '*.csv' -print
+# Copy the continuous merged CSV identified above:
+cp "dataset-download/<continuous-dataset-file>.csv" data/continuous_dataset.csv
+```
 
-# With default convention (expects file at data/continuous_dataset.csv):
+The dataset is attributed to its original creator under CC BY 4.0. Cite the dataset DOI when reusing it. Because the data is distributed separately, cloning this repository alone does not download it.
+
+## Requirements and input checks
+
+Install Python 3.11 or later, then:
+
+```bash
+python -m pip install -r requirements.txt
+```
+
+The script checks that the CSV exists and can be read; verifies the required datetime and nat_demand columns; parses timestamps; rejects duplicate timestamps and non-numeric feature values; and requires at least 200 rows for the 168-hour lag and temporal split. Missing target values are dropped. Optional weather columns are linearly interpolated; the model uses T2M_toc when supplied. Errors name the missing file or invalid column so setup issues are easier to diagnose.
+
+## Run the forecast
+
+From the repository root, after placing the dataset at data/continuous_dataset.csv:
+
+```bash
 python analysis.py
 ```
 
-Outputs saved to `outputs/`:
-
-| File | Contents |
-|---|---|
-| `outputs/forecast_analysis.png` | Actual vs forecast + residuals + feature importance |
-| `outputs/diurnal_curve.png` | Average hourly load — weekday vs weekend |
-| `outputs/temperature_scatter.png` | Temperature vs demand (coloured by hour) |
-
----
-
-## Installation
+Or pass a CSV path explicitly:
 
 ```bash
-pip install pandas numpy xgboost scikit-learn matplotlib seaborn
+python analysis.py path/to/continuous_dataset.csv
 ```
----
 
-## Running with Docker
+The script makes a chronological 80/20 split (no shuffle), trains XGBoost, reports metrics against the same-hour-yesterday baseline, and writes plots under outputs/. If data/weekly pre-dispatch forecast.csv is also present, it reports the optional comparison with the official pre-dispatch forecast; the model run does not require that second file.
 
-### Option A: Using Docker CLI
+## Synthetic-data smoke test
+
+This check exercises missing-file and input-schema messages, then runs the complete forecasting and plotting path on a small generated dataset. It does not read the Panama dataset and its metrics are not project results.
+
 ```bash
-# 1. Build image
-docker build -t panama-grid .
+python smoke_test.py
+```
 
-# 2. Run with mounted data and outputs directories
+A successful run prints PASS and creates temporary plots which are removed when the test exits.
+
+## Docker
+
+Build and run after acquiring the dataset as described above:
+
+```bash
+mkdir -p data outputs
+docker build -t panama-grid .
 docker run --rm \
   -v "${PWD}/data:/app/data:ro" \
   -v "${PWD}/outputs:/app/outputs" \
   panama-grid
 ```
 
-### Option B: Using Docker Compose
+Or use Docker Compose:
+
 ```bash
+mkdir -p data outputs
 docker compose up --build
 ```
-The forecast results and plots will be saved directly into `./outputs/`.
+
+Both methods use data/continuous_dataset.csv and save plots to outputs/. To run the same synthetic smoke test inside the built image:
+
+```bash
+docker compose build
+docker compose run --rm --entrypoint python panama-grid smoke_test.py
+```
+
+## Features and evaluation
+
+The script creates cyclical encodings for hour and weekday, load lags at 1, 24, and 168 hours, and uses T2M_toc plus (T2M_toc - 24)^2 when that weather column exists. Month encodings are added for datasets spanning more than one year. The target is not interpolated to avoid using future information. Weather values are linearly interpolated before lag rows are removed.
+
+The test split is the final 20% of the chronologically ordered records. Reported metrics are MAE, RMSE, MAPE, and R². The same-hour-yesterday baseline uses the 24-hour lag.
+
+## Previously reported results — not reproduced in this update
+
+The repository previously documented **1.63% MAPE** for XGBoost and **6.03% MAPE** for the same-hour-yesterday baseline on a 2019–2020 chronological test period. These values are retained as the project's prior reported results; they have **not** been independently reproduced as part of this reproducibility update. The synthetic smoke test only verifies that the pipeline runs and produces outputs. Running with the acquired source dataset is required to recalculate and verify model metrics.
+
+## Outputs
+
+- outputs/forecast_analysis.png — actual vs. forecast, residuals, and feature importance
+- outputs/diurnal_curve.png — average weekday and weekend hourly demand
+- outputs/temperature_scatter.png — temperature vs. demand when T2M_toc is available
+
+The published dataset's source description, upstream data sources, and license are available on the [Mendeley Data record](https://data.mendeley.com/datasets/byx7sztj59/1).
