@@ -1,7 +1,7 @@
 """
 Panama Grid — Next-Hour Load Forecasting
 =========================================
-Author  : [Your Name] | EEE Portfolio Project
+Author  : Soham Vashistha
 Dataset : Panama Case Study — continuous_dataset.csv
 Model   : XGBoost Regressor (chronological 80/20 split, no data leakage)
 Task    : Predict nat_demand (MW) for the NEXT hour
